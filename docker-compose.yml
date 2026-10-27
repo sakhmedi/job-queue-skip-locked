@@ -1,0 +1,77 @@
+# Общие настройки для api и воркеров (YAML-якорь, чтобы не повторяться).
+x-app: &app
+  build: .
+  image: job-queue-skip-locked:dev
+  restart: unless-stopped
+
+x-worker: &worker
+  <<: *app
+  command: ["python", "-m", "worker.main"]
+  # Воркер получает SIGTERM и дорабатывает текущее задание (генерация ≤ 5 с).
+  stop_grace_period: 15s
+  depends_on:
+    api:
+      condition: service_healthy
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: jobs
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d jobs"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  api:
+    <<: *app
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/jobs
+      # Отдельная база для тестов (`docker compose run --rm api pytest`), создаётся автоматически.
+      TEST_DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/jobs_test
+      WORKER_TOKEN: ${WORKER_TOKEN:-dev-worker-token-change-me}
+      STALE_AFTER_SECONDS: ${STALE_AFTER_SECONDS:-600}
+      MAX_ATTEMPTS: ${MAX_ATTEMPTS:-3}
+      REAPER_INTERVAL_SECONDS: ${REAPER_INTERVAL_SECONDS:-30}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=2)"
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+  worker-1:
+    <<: *worker
+    environment:
+      WORKER_ID: worker-1
+      API_URL: http://api:8000
+      WORKER_TOKEN: ${WORKER_TOKEN:-dev-worker-token-change-me}
+      FAIL_RATE: ${FAIL_RATE:-0.1}
+      POLL_INTERVAL: ${POLL_INTERVAL:-1.0}
+
+  worker-2:
+    <<: *worker
+    environment:
+      WORKER_ID: worker-2
+      API_URL: http://api:8000
+      WORKER_TOKEN: ${WORKER_TOKEN:-dev-worker-token-change-me}
+      FAIL_RATE: ${FAIL_RATE:-0.1}
+      POLL_INTERVAL: ${POLL_INTERVAL:-1.0}
+
+volumes:
+  pgdata:

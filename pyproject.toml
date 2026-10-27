@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "job-queue-skip-locked"
+version = "0.1.0"
+description = "PostgreSQL-backed job queue for GPU generation workers — FastAPI + SELECT … FOR UPDATE SKIP LOCKED"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "sqlalchemy[asyncio]>=2.0.36",
+    "asyncpg>=0.30",
+    "alembic>=1.14",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.8",
+]
+
+# Проект не публикуется как библиотека: pyproject нужен только для зависимостей.
+# Код запускается из корня репозитория (app/, worker/, scripts/).
+[tool.setuptools]
+packages = []
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+# E/F — базовые ошибки, I — сортировка импортов, B — типичные баги,
+# UP — современный синтаксис, SIM — упрощения, ASYNC — ошибки в async-коде.
+select = ["E", "F", "I", "B", "UP", "SIM", "ASYNC"]
